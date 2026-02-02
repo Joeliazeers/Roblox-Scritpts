@@ -1,0 +1,594 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local HttpService = game:GetService("HttpService")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+-- // FOLDER SETUP // --
+if not isfolder("ArchemaraHub") then
+    makefolder("ArchemaraHub")
+end
+
+-- // VARIABLES // --
+local Elements = {} 
+local SelectedConfig = nil
+local ConfigNameInput = ""
+
+local OriginalCritChance = 0
+local IsCritEnabled = false
+
+-- ESP Tables
+local ESP_Mobs = {}
+local ESP_Chests = {}
+local ESP_Boss = {}
+
+-- Teleport Variables
+local TweenSpeed = 300 
+local NoclipConnection = nil
+local BossNotificationSent = false
+
+-- // COLORS // --
+local COLOR_MOB = Color3.fromRGB(255, 0, 0)      
+local COLOR_CHEST = Color3.fromRGB(255, 255, 0)  
+local COLOR_BOSS = Color3.fromRGB(0, 85, 255)    
+
+-- // WINDOW // --
+local Window = Rayfield:CreateWindow({
+   Name = "ARCHEMARA HUB",
+   LoadingTitle = "ARCHEMARA HUB",
+   LoadingSubtitle = "Script",
+   ConfigurationSaving = {
+      Enabled = false, 
+      FolderName = "ArchemaraHub",
+      FileName = "Default"
+   },
+   Discord = {
+      Enabled = false,
+      Invite = "noinvitelink",
+      RememberJoins = true
+   },
+   KeySystem = false,
+})
+
+-- // TABS // --
+local PlayerTab = Window:CreateTab("Player", 4483345998)
+local ESPTab = Window:CreateTab("ESP", 4483345998)
+local TeleportTab = Window:CreateTab("Teleport", 4483345998)
+local SettingsTab = Window:CreateTab("Settings", 4483345998)
+
+-- // HELPER FUNCTIONS // --
+
+-- Function to get the player's character folder dynamically
+local function GetPlayerAssets()
+    local charFolder = workspace.ArchemaraWorkspace.CORE_FOLDERS.PlayerCharacters:FindFirstChild(LocalPlayer.Name)
+    if charFolder then
+        return charFolder:FindFirstChild("CoreAssets")
+    end
+    return nil
+end
+
+local function CreateHighlight(target, color, parentTable)
+    if not target then return end
+    local highlight = Instance.new("Highlight")
+    highlight.FillColor = color
+    highlight.OutlineColor = Color3.new(1, 1, 1)
+    highlight.FillTransparency = 0.5
+    highlight.OutlineTransparency = 0
+    highlight.Parent = target
+    table.insert(parentTable, highlight)
+    target.AncestryChanged:Connect(function(_, parent)
+        if not parent then highlight:Destroy() end
+    end)
+end
+
+local function CreateBoxESP(targetPart, text, color, parentTable)
+    if not targetPart then return end
+    
+    local billboard = Instance.new("BillboardGui")
+    billboard.Adornee = targetPart
+    billboard.Size = UDim2.new(0, 200, 0, 50)
+    billboard.StudsOffset = Vector3.new(0, 5, 0)
+    billboard.AlwaysOnTop = true
+    billboard.Parent = targetPart
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.Text = text 
+    label.TextColor3 = color
+    label.TextStrokeTransparency = 0
+    label.TextSize = 15
+    label.Font = Enum.Font.GothamBold
+    label.Parent = billboard
+    
+    local box = Instance.new("BoxHandleAdornment")
+    box.Adornee = targetPart
+    box.Size = targetPart.Size or Vector3.new(4,8,1)
+    box.Color3 = color
+    box.Transparency = 0.5
+    box.AlwaysOnTop = true
+    box.ZIndex = 10
+    box.Parent = targetPart
+
+    local espObjects = {billboard, box}
+    table.insert(parentTable, espObjects)
+    
+    return espObjects
+end
+
+local function FindBossPart(bossDoorModel)
+    if not bossDoorModel then return nil end
+    
+    local part = bossDoorModel:FindFirstChild("Anchor")
+    if part then return part end
+    
+    part = bossDoorModel:FindFirstChild("LDoor") or bossDoorModel:FindFirstChild("RDoor")
+    if part then return part end
+    
+    part = bossDoorModel:FindFirstChild("Door") or bossDoorModel:FindFirstChild("Part")
+    if part then return part end
+    
+    for _, child in pairs(bossDoorModel:GetChildren()) do
+        if child:IsA("BasePart") then
+            return child
+        end
+    end
+    
+    return nil
+end
+
+-- // PLAYER TAB // --
+PlayerTab:CreateSection("Stats Management")
+
+Elements["MaxHealth"] = PlayerTab:CreateInput({
+   Name = "Max Health",
+   PlaceholderText = "Enter Amount",
+   Flag = "MaxHealth",
+   Callback = function(Text)
+      local value = tonumber(Text)
+      local assets = GetPlayerAssets()
+      if value and assets then
+         pcall(function()
+            assets.MaxHealth.Value = value
+            assets.Health.Value = value
+         end)
+      end
+   end,
+})
+
+Elements["MaxStamina"] = PlayerTab:CreateInput({
+   Name = "Max Stamina",
+   PlaceholderText = "Enter Amount",
+   Flag = "MaxStamina",
+   Callback = function(Text)
+      local value = tonumber(Text)
+      local assets = GetPlayerAssets()
+      if value and assets then
+         pcall(function()
+             assets.MaxStamina.Value = value
+             assets.Stamina.Value = value
+         end)
+      end
+   end,
+})
+
+PlayerTab:CreateSection("Combat")
+
+Elements["AttackSpeed"] = PlayerTab:CreateSlider({
+   Name = "Attack Speed",
+   Range = {0.9, 2},
+   Increment = 0.1,
+   Suffix = "Speed",
+   CurrentValue = 0.9,
+   Flag = "AttackSpeed",
+   Callback = function(Value)
+      local assets = GetPlayerAssets()
+      if assets then
+          pcall(function()
+             assets.ActiveItems.One.Stats.AttackSpeed.Value = Value
+          end)
+      end
+   end,
+})
+
+Elements["BaseDamage"] = PlayerTab:CreateSlider({
+   Name = "Base Damage Multiplier",
+   Range = {1, 5},
+   Increment = 1,
+   Suffix = "x",
+   CurrentValue = 1,
+   Flag = "BaseDamage",
+   Callback = function(Value)
+      local assets = GetPlayerAssets()
+      if assets then
+          pcall(function()
+             assets.ActiveItems.One.Stats.BaseDamage.Value = Value
+          end)
+      end
+   end,
+})
+
+Elements["AlwaysCrit"] = PlayerTab:CreateToggle({
+   Name = "Always Crit (100%)",
+   CurrentValue = false,
+   Flag = "AlwaysCrit",
+   Callback = function(Value)
+      local assets = GetPlayerAssets()
+      if assets then
+          pcall(function()
+              local critStat = assets.ActiveItems.One.Stats.CriticalChance
+              
+              if Value then
+                  OriginalCritChance = critStat.Value
+                  IsCritEnabled = true
+                  
+                  task.spawn(function()
+                      while IsCritEnabled do
+                          pcall(function()
+                              critStat.Value = 100
+                          end)
+                          task.wait(0.1)
+                      end
+                  end)
+              else
+                  IsCritEnabled = false
+                  critStat.Value = OriginalCritChance
+              end
+          end)
+      end
+   end,
+})
+
+PlayerTab:CreateSection("Movement")
+
+local VelocityLabel = PlayerTab:CreateLabel("Current Speed: 0, 0")
+
+task.spawn(function()
+    while task.wait(0.2) do
+        pcall(function()
+            local assets = GetPlayerAssets()
+            if assets then
+                local linVel = assets.RigAdditions.LinearVelocity
+                if linVel then
+                    local v = linVel.PlaneVelocity
+                    VelocityLabel:Set("Current Speed: " .. math.floor(v.X) .. ", " .. math.floor(v.Y))
+                end
+            end
+        end)
+    end
+end)
+
+Elements["SpeedHack"] = PlayerTab:CreateSlider({
+   Name = "Speed Override",
+   Range = {16, 100},
+   Increment = 1,
+   Suffix = "Studs/s",
+   CurrentValue = 16,
+   Flag = "SpeedHack",
+   Callback = function(Value)
+       getgenv().TargetSpeed = Value
+   end,
+})
+
+task.spawn(function()
+    while task.wait() do
+        if getgenv().TargetSpeed and getgenv().TargetSpeed > 16 then
+            pcall(function()
+                local assets = GetPlayerAssets()
+                if assets then
+                    local linVel = assets.RigAdditions.LinearVelocity
+                    if linVel and linVel.VelocityConstraintMode == Enum.VelocityConstraintMode.Vector then
+                        local currentVel = linVel.VectorVelocity
+                        if currentVel.Magnitude > 0 then
+                            linVel.VectorVelocity = currentVel.Unit * getgenv().TargetSpeed
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end)
+
+
+-- // ESP TAB // --
+ESPTab:CreateSection("Visuals")
+
+Elements["MobESP"] = ESPTab:CreateToggle({
+   Name = "Active Mob ESP (Red)",
+   CurrentValue = false,
+   Flag = "MobESP",
+   Callback = function(Value)
+       if Value then
+           local folder = workspace.ArchemaraWorkspace.CORE_FOLDERS.ActiveMobs
+           for _, mob in pairs(folder:GetChildren()) do
+               CreateHighlight(mob, COLOR_MOB, ESP_Mobs)
+           end
+           folder.ChildAdded:Connect(function(mob)
+               if Elements["MobESP"].CurrentValue then
+                   CreateHighlight(mob, COLOR_MOB, ESP_Mobs)
+               end
+           end)
+       else
+           for _, hl in pairs(ESP_Mobs) do hl:Destroy() end
+           ESP_Mobs = {}
+       end
+   end,
+})
+
+Elements["ChestESP"] = ESPTab:CreateToggle({
+   Name = "Chest ESP (Yellow)",
+   CurrentValue = false,
+   Flag = "ChestESP",
+   Callback = function(Value)
+       if Value then
+           local cosmeticFolder = workspace.ArchemaraWorkspace.CORE_FOLDERS.ActiveCosmetics
+           local function ScanRoomForChests(room)
+               local props = room:FindFirstChild("Props")
+               if props then
+                   local chestsFolder = props:FindFirstChild("Chests")
+                   if chestsFolder then
+                       for _, chest in pairs(chestsFolder:GetChildren()) do
+                           if chest.Name == "StandardChest" or chest.Name:find("Chest") then
+                               local hitbox = chest:FindFirstChild("HitBox")
+                               local openedVal = chest:FindFirstChild("Opened") 
+                               
+                               local isOpened = false
+                               if openedVal and openedVal:IsA("BoolValue") and openedVal.Value == true then
+                                   isOpened = true
+                               end
+
+                               if hitbox and not isOpened then
+                                   local specificESP = CreateBoxESP(hitbox, "Chest", COLOR_CHEST, ESP_Chests)
+                                   
+                                   if openedVal and openedVal:IsA("BoolValue") then
+                                        local connection
+                                        connection = openedVal.Changed:Connect(function(val)
+                                            if val == true then
+                                                if specificESP[1] then specificESP[1]:Destroy() end
+                                                if specificESP[2] then specificESP[2]:Destroy() end
+                                                if connection then connection:Disconnect() end
+                                            end
+                                        end)
+                                   end
+                               end
+                           end
+                       end
+                   end
+               end
+           end
+           for _, room in pairs(cosmeticFolder:GetChildren()) do ScanRoomForChests(room) end
+           cosmeticFolder.ChildAdded:Connect(function(room)
+               task.wait(1)
+               if Elements["ChestESP"].CurrentValue then ScanRoomForChests(room) end
+           end)
+       else
+           for _, item in pairs(ESP_Chests) do
+               if item[1] then item[1]:Destroy() end
+               if item[2] then item[2]:Destroy() end
+           end
+           ESP_Chests = {}
+       end
+   end,
+})
+
+Elements["BossESP"] = ESPTab:CreateToggle({
+   Name = "Boss Room ESP (Blue)",
+   CurrentValue = false,
+   Flag = "BossESP",
+   Callback = function(Value)
+       if Value then
+           local cosmeticFolder = workspace.ArchemaraWorkspace.CORE_FOLDERS.ActiveCosmetics
+           
+           local function ScanRoomForBoss(room)
+               if room.Name:find("BossRoom") then
+                   local bossDoor = room:FindFirstChild("BossDoor")
+                   if bossDoor then
+                       local targetPart = FindBossPart(bossDoor)
+                       if targetPart then
+                           CreateBoxESP(targetPart, "Boss Room", COLOR_BOSS, ESP_Boss)
+                           
+                           if not BossNotificationSent then
+                               Rayfield:Notify({
+                                   Title = "Boss Room Found!",
+                                   Content = "The Boss Room has been located.",
+                                   Duration = 5,
+                                   Image = 4483345998,
+                               })
+                               BossNotificationSent = true 
+                           end
+                       end
+                   end
+               end
+           end
+           
+           for _, room in pairs(cosmeticFolder:GetChildren()) do ScanRoomForBoss(room) end
+           cosmeticFolder.ChildAdded:Connect(function(room)
+               task.wait(1)
+               if Elements["BossESP"].CurrentValue then ScanRoomForBoss(room) end
+           end)
+       else
+           for _, item in pairs(ESP_Boss) do
+               if item[1] then item[1]:Destroy() end
+               if item[2] then item[2]:Destroy() end
+           end
+           ESP_Boss = {}
+           BossNotificationSent = false
+       end
+   end,
+})
+
+-- // TELEPORT TAB // --
+TeleportTab:CreateSection("Teleport Action")
+
+TeleportTab:CreateSlider({
+   Name = "Flight Speed",
+   Range = {50, 2000},
+   Increment = 10,
+   Suffix = "Studs/s",
+   CurrentValue = 300,
+   Flag = "TweenSpeed",
+   Callback = function(Value)
+       TweenSpeed = Value
+   end,
+})
+
+TeleportTab:CreateButton({
+   Name = "Fly to Boss Room",
+   Callback = function()
+       local targetPart = nil
+       
+       local cosmeticFolder = workspace.ArchemaraWorkspace.CORE_FOLDERS.ActiveCosmetics
+       for _, room in pairs(cosmeticFolder:GetChildren()) do
+           if room.Name:find("BossRoom") then
+               local bossDoor = room:FindFirstChild("BossDoor")
+               if bossDoor then
+                   targetPart = FindBossPart(bossDoor)
+                   if targetPart then break end
+               end
+           end
+       end
+
+       if targetPart then
+           local player = Players.LocalPlayer
+           if player and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+               local root = player.Character.HumanoidRootPart
+               
+               -- UPDATED OFFSET: 0 X, -5 Y relative to whatever part we found
+               local targetCFrame = targetPart.CFrame * CFrame.new(0, -5, 0)
+               
+               local distance = (root.Position - targetCFrame.Position).Magnitude
+               local duration = distance / TweenSpeed
+               
+               local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
+               
+               if NoclipConnection then NoclipConnection:Disconnect() end
+               NoclipConnection = RunService.Stepped:Connect(function()
+                   for _, part in pairs(player.Character:GetDescendants()) do
+                       if part:IsA("BasePart") and part.CanCollide then
+                           part.CanCollide = false
+                       end
+                   end
+               end)
+               
+               root.Anchored = true
+               local tween = TweenService:Create(root, tweenInfo, {CFrame = targetCFrame})
+               
+               Rayfield:Notify({Title = "Teleporting", Content = "Flying to Boss Room...", Duration = 3})
+               tween:Play()
+               
+               tween.Completed:Connect(function()
+                   if NoclipConnection then NoclipConnection:Disconnect() end
+                   root.Anchored = false
+                   Rayfield:Notify({Title = "Arrived", Content = "Teleport Complete", Duration = 2})
+               end)
+           end
+       else
+           Rayfield:Notify({Title = "Error", Content = "No Boss Room Found!", Duration = 2})
+       end
+   end,
+})
+
+-- // CONFIG SYSTEM // --
+local function SaveConfig(name)
+    local data = {}
+    for flag, element in pairs(Elements) do
+        if element.CurrentValue ~= nil then data[flag] = element.CurrentValue end
+    end
+    writefile("ArchemaraHub/" .. name .. ".json", HttpService:JSONEncode(data))
+end
+
+local function LoadConfig(name)
+    if isfile("ArchemaraHub/" .. name .. ".json") then
+        local content = readfile("ArchemaraHub/" .. name .. ".json")
+        local data = HttpService:JSONDecode(content)
+        for flag, value in pairs(data) do
+            if Elements[flag] then Elements[flag]:Set(value) end
+        end
+    end
+end
+
+local function GetConfigList()
+    local files = {}
+    if isfolder("ArchemaraHub") then
+        for _, file in pairs(listfiles("ArchemaraHub")) do
+            if file:sub(-5) == ".json" and not file:find("autoload.txt") then
+                table.insert(files, file:match("ArchemaraHub/(.*).json"))
+            end
+        end
+    end
+    return files
+end
+
+SettingsTab:CreateSection("Configuration Manager")
+
+SettingsTab:CreateInput({
+   Name = "Config Name",
+   PlaceholderText = "Input Name",
+   Callback = function(Text) ConfigNameInput = Text end,
+})
+
+local ConfigDropdown
+ConfigDropdown = SettingsTab:CreateDropdown({
+   Name = "Select Config",
+   Options = GetConfigList(),
+   CurrentOption = "",
+   MultipleOptions = false,
+   Flag = "ConfigDropdown",
+   Callback = function(Option)
+      if Option and Option[1] then SelectedConfig = Option[1] end
+   end,
+})
+
+SettingsTab:CreateButton({
+   Name = "Save / Overwrite Config",
+   Callback = function()
+      if ConfigNameInput ~= "" then
+         SaveConfig(ConfigNameInput)
+         Rayfield:Notify({Title = "Saved", Content = ConfigNameInput, Duration = 2})
+         ConfigDropdown:Refresh(GetConfigList(), true)
+      elseif SelectedConfig then
+         SaveConfig(SelectedConfig)
+         Rayfield:Notify({Title = "Overwritten", Content = SelectedConfig, Duration = 2})
+      end
+   end,
+})
+
+SettingsTab:CreateButton({
+   Name = "Load Selected Config",
+   Callback = function()
+      if SelectedConfig then
+         LoadConfig(SelectedConfig)
+         Rayfield:Notify({Title = "Loaded", Content = SelectedConfig, Duration = 2})
+      end
+   end,
+})
+
+SettingsTab:CreateSection("Autostart")
+
+local AutoloadToggle = SettingsTab:CreateToggle({
+   Name = "Autoload Selected Config",
+   CurrentValue = false,
+   Flag = "AutoloadToggle",
+   Callback = function(Value)
+      if Value and SelectedConfig then
+         writefile("ArchemaraHub/autoload.txt", SelectedConfig)
+      elseif not Value then
+         if isfile("ArchemaraHub/autoload.txt") then delfile("ArchemaraHub/autoload.txt") end
+      end
+   end,
+})
+
+task.spawn(function()
+    if isfile("ArchemaraHub/autoload.txt") then
+        local autoConfig = readfile("ArchemaraHub/autoload.txt")
+        if isfile("ArchemaraHub/" .. autoConfig .. ".json") then
+            task.wait(1)
+            LoadConfig(autoConfig)
+            Rayfield:Notify({Title = "Autoload", Content = "Loaded " .. autoConfig, Duration = 3})
+            SelectedConfig = autoConfig
+            ConfigDropdown:Set({autoConfig})
+            AutoloadToggle:Set(true)
+        end
+    end
+end)
