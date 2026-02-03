@@ -5,6 +5,20 @@ local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
+-- // GAME ID CHECK // --
+local TargetPlaceId = 13100646976 -- <--- CHANGE THIS TO THE ACTUAL GAME ID
+print("Current Game ID:", game.PlaceId) -- Check your console (F9) to see the ID to put above
+
+if game.PlaceId ~= TargetPlaceId then
+    Rayfield:Notify({
+        Title = "Wrong Game",
+        Content = "The script is not made for this game. Current ID: " .. game.PlaceId,
+        Duration = 10,
+        Image = 4483345998,
+    })
+    return -- Stops the script here if the ID doesn't match
+end
+
 -- // FOLDER SETUP // --
 if not isfolder("ArchemaraHub") then
     makefolder("ArchemaraHub")
