@@ -598,7 +598,7 @@ local AutoBuyPotionsEnabled = false
 local PotionStatusLabel = DiceTab:CreateLabel("Status: Idle")
 
 local AutoBuyPotionsElement = DiceTab:CreateToggle({
-    Name = "Auto Clear Potions (Buy All Stock)",
+    Name = "Auto Clear Potions (Safe Buy)",
     CurrentValue = false,
     Flag = "AutoBuyPotionsToggle",
     Callback = function(Value)
@@ -623,20 +623,13 @@ local AutoBuyPotionsElement = DiceTab:CreateToggle({
                                     if stock > 0 then
                                         PotionStatusLabel:Set("Buying: " .. child.Name .. " ("..stock..")")
                                         
-                                        -- ATTEMPT TO BUY (Using MerchantBuy based on scan)
+                                        -- SAFE BUY: Strictly uses the standard 'buy' remote
                                         pcall(function()
-                                            -- 1. Try MerchantBuy (Most likely for Potions)
-                                            if ReplicatedStorage.Events:FindFirstChild("MerchantBuy") then
-                                                ReplicatedStorage.Events.MerchantBuy:InvokeServer(child.Name, stock)
-                                            end
-
-                                            -- 2. Backup: Try 'buy' again just in case
-                                            if ReplicatedStorage.Events:FindFirstChild("buy") then
-                                                ReplicatedStorage.Events.buy:InvokeServer(child.Name, stock)
-                                            end
+                                            -- Using child.Name (e.g., "PrismaticPotion") and Stock amount
+                                            ReplicatedStorage.Events.buy:InvokeServer(child.Name, stock)
                                         end)
                                         
-                                        task.wait(0.2) -- Small delay to prevent crashing the remote
+                                        task.wait(0.25) -- 0.25s delay to be safe and avoid transaction errors
                                     end
                                 end
                             end
@@ -647,7 +640,7 @@ local AutoBuyPotionsElement = DiceTab:CreateToggle({
                     
                     if AutoBuyPotionsEnabled then
                         PotionStatusLabel:Set("Status: Waiting for Restock...")
-                        task.wait(2) -- Cooldown before rescanning
+                        task.wait(3) -- Longer wait to look natural
                     end
                 end
                 PotionStatusLabel:Set("Status: Idle")
