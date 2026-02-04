@@ -501,7 +501,7 @@ local AutoBuyElement = DiceTab:CreateToggle({
                         task.wait(0.1)
                     end
                     AutoBuyStatus:Set("Status: Cycle Complete")
-                    task.wait(5)
+                    task.wait(1)
                 end
                 AutoBuyStatus:Set("Status: Idle")
             end)
