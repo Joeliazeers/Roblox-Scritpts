@@ -22,7 +22,7 @@ local Elements = {}
 local Window = Rayfield:CreateWindow({
     Name = "Spin a Baddie Script",
     LoadingTitle = "Archemara Hub",
-    LoadingSubtitle = "Exponential Edition",
+    LoadingSubtitle = "Shop Clearer Edition",
     ConfigurationSaving = { Enabled = false },
     Discord = { Enabled = false, Invite = "", RememberJoins = true },
     KeySystem = false
@@ -98,12 +98,52 @@ local function forceSelectAndClick(button)
     VirtualInputManager:SendMouseButtonEvent(clickX, clickY, 0, false, game, 1)
 end
 
+-- =========================================================================
+--  SHOP STOCK READER (NEW)
+-- =========================================================================
+
+local function getShopStock(diceName)
+    local pGui = Players.LocalPlayer:FindFirstChild("PlayerGui")
+    if not pGui then return 0 end
+    
+    -- Target: Main.Restock.ScrollingFrame[DiceName].stock
+    if pGui:FindFirstChild("Main") and pGui.Main:FindFirstChild("Restock") then
+        local scroll = pGui.Main.Restock:FindFirstChild("ScrollingFrame")
+        if scroll then
+            local diceFrame = scroll:FindFirstChild(diceName)
+            if diceFrame then
+                local stockLabel = diceFrame:FindFirstChild("stock") -- Case sensitive check
+                if stockLabel and stockLabel:IsA("TextLabel") then
+                    local text = stockLabel.Text
+                    
+                    -- CHECK 1: "NO STOCK"
+                    if text:upper():find("NO STOCK") then
+                        return 0
+                    end
+                    
+                    -- CHECK 2: "x999" -> 999
+                    local num = tonumber(text:match("%d+"))
+                    if num then
+                        return num
+                    end
+                end
+            end
+        end
+    end
+    return 0 -- Default to 0 if UI not found
+end
+
+-- =========================================================================
+--  INVENTORY FINDERS
+-- =========================================================================
+
 local function findDiceContainer()
     local pGui = Players.LocalPlayer:FindFirstChild("PlayerGui")
     if not pGui then return nil end
     if pGui:FindFirstChild("Main") and pGui.Main:FindFirstChild("Dice") and pGui.Main.Dice:FindFirstChild("Container") then
         return pGui.Main.Dice.Container
     end
+    -- Fallback
     if pGui:FindFirstChild("Main") then
         for _, v in pairs(pGui.Main:GetDescendants()) do
             if v.Name == "Container" and v:FindFirstChildOfClass("ImageButton") then
@@ -139,6 +179,10 @@ local function getContainerDiceStock(frame)
     end
     return 1 
 end
+
+-- =========================================================================
+--  SYSTEM FUNCTIONS
+-- =========================================================================
 
 local NotifConnection = nil
 local function toggleNotificationBlocker(enable)
@@ -426,28 +470,23 @@ local AutoSelectElement = DiceTab:CreateToggle({
                 while AutoSelectEnabled do
                     pcall(function() -- ERROR PROTECTION
                         local container = findDiceContainer()
-                        
                         if container then
                             local currentName = getCurrentDiceName()
                             local currentRank = getDiceRank(currentName)
-                            
                             local bestUpgradeName = nil
                             local bestUpgradeRank = -1
                             local bestUpgradeClicker = nil
                             
-                            -- Scan for best dice
                             for _, frame in pairs(container:GetChildren()) do
                                 if frame:IsA("Frame") or frame:IsA("ImageButton") then
                                     local dName = frame.Name
                                     local rank = getDiceRank(dName)
-                                    
                                     if rank > 0 then
                                         local cStock = getContainerDiceStock(frame)
                                         if cStock > 0 then
                                             if rank > bestUpgradeRank then
                                                 bestUpgradeRank = rank
                                                 bestUpgradeName = dName
-                                                -- VITAL: Try finding 'Click' button, else use frame
                                                 bestUpgradeClicker = frame:FindFirstChild("Click") or frame
                                             end
                                         end
@@ -455,13 +494,11 @@ local AutoSelectElement = DiceTab:CreateToggle({
                                 end
                             end
                             
-                            -- Logic
                             if bestUpgradeName and bestUpgradeRank > currentRank then
                                 SelectStatusLabel:Set("Locking on: " .. bestUpgradeName)
-                                
                                 if bestUpgradeClicker then
                                     forceSelectAndClick(bestUpgradeClicker)
-                                    task.wait(1) -- Wait for equip
+                                    task.wait(1) 
                                 end
                             else
                                 SelectStatusLabel:Set("Holding: " .. currentName)
@@ -470,8 +507,7 @@ local AutoSelectElement = DiceTab:CreateToggle({
                             SelectStatusLabel:Set("Status: Menu Not Found")
                         end
                     end)
-                    
-                    task.wait(1) -- Check every second
+                    task.wait(1) 
                 end
                 SelectStatusLabel:Set("Status: Idle")
             end)
@@ -485,7 +521,7 @@ DiceTab:CreateSection("Auto-Buy")
 local AutoBuyStatus = DiceTab:CreateLabel("Status: Idle")
 
 local AutoBuyElement = DiceTab:CreateToggle({
-    Name = "Auto Buy (Exponential Mode)",
+    Name = "Auto Clear Shop (Buy Available Stock)",
     CurrentValue = false,
     Flag = "AutoBuyToggle",
     Callback = function(Value)
@@ -493,31 +529,25 @@ local AutoBuyElement = DiceTab:CreateToggle({
         if Value then
             task.spawn(function()
                 while AutoBuyEnabled do
-                    local container = findDiceContainer()
-                    if container then
-                        for _, frame in pairs(container:GetChildren()) do
-                            if not AutoBuyEnabled then break end
-                            if frame:IsA("Frame") or frame:IsA("ImageButton") then
-                                -- Get real-time stock
-                                local stock = getContainerDiceStock(frame)
-                                local name = frame.Name
-                                
-                                -- EXPONENTIAL LOGIC: Buy exactly what you have (Double it)
-                                -- If you have 0, buy 1.
-                                local amountToBuy = stock
-                                if amountToBuy < 1 then amountToBuy = 1 end
-                                
-                                task.spawn(function()
-                                    pcall(function()
-                                        ReplicatedStorage.Events.buy:InvokeServer(name, amountToBuy)
-                                    end)
+                    for k, v in pairs(DiceRankings) do
+                        if not AutoBuyEnabled then break end
+                        
+                        -- NEW LOGIC: Check Shop Stock for this specific Dice
+                        local diceFullName = k .. " Dice"
+                        local stockAvailable = getShopStock(diceFullName)
+                        
+                        if stockAvailable > 0 then
+                            task.spawn(function()
+                                pcall(function()
+                                    -- Buy EXACTLY the amount available in the shop
+                                    ReplicatedStorage.Events.buy:InvokeServer(diceFullName, stockAvailable)
                                 end)
-                                task.wait(0.02) -- Tiny delay per item
-                            end
+                            end)
                         end
                     end
-                    AutoBuyStatus:Set("Status: Doubling Stock...")
-                    task.wait(0.5) -- Fast Loop
+                    
+                    AutoBuyStatus:Set("Status: Clearing Stock...")
+                    task.wait(0.5) -- Fast check loop
                 end
                 AutoBuyStatus:Set("Status: Idle")
             end)
