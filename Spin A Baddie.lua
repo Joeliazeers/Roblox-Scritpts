@@ -606,7 +606,6 @@ local AutoBuyPotionsElement = DiceTab:CreateToggle({
         if Value then
             task.spawn(function()
                 while AutoBuyPotionsEnabled do
-                    -- We iterate the GUI Children directly so we don't need a hardcoded list
                     local pGui = Players.LocalPlayer:FindFirstChild("PlayerGui")
                     if pGui and pGui:FindFirstChild("Main") and pGui.Main:FindFirstChild("Potions") then
                         local scroll = pGui.Main.Potions:FindFirstChild("ScrollingFrame")
@@ -623,12 +622,21 @@ local AutoBuyPotionsElement = DiceTab:CreateToggle({
                                     
                                     if stock > 0 then
                                         PotionStatusLabel:Set("Buying: " .. child.Name .. " ("..stock..")")
+                                        
+                                        -- ATTEMPT TO BUY (Using MerchantBuy based on scan)
                                         pcall(function()
-                                            -- Using the same 'buy' event as Dice. 
-                                            -- If this fails, the game might use 'buyPotion' instead.
-                                            ReplicatedStorage.Events.buy:InvokeServer(child.Name, stock)
+                                            -- 1. Try MerchantBuy (Most likely for Potions)
+                                            if ReplicatedStorage.Events:FindFirstChild("MerchantBuy") then
+                                                ReplicatedStorage.Events.MerchantBuy:InvokeServer(child.Name, stock)
+                                            end
+
+                                            -- 2. Backup: Try 'buy' again just in case
+                                            if ReplicatedStorage.Events:FindFirstChild("buy") then
+                                                ReplicatedStorage.Events.buy:InvokeServer(child.Name, stock)
+                                            end
                                         end)
-                                        task.wait(0.2) -- Small delay to prevent throttle
+                                        
+                                        task.wait(0.2) -- Small delay to prevent crashing the remote
                                     end
                                 end
                             end
