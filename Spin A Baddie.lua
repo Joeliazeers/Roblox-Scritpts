@@ -547,7 +547,7 @@ local AutoBuyElement = DiceTab:CreateToggle({
                     end
                     
                     AutoBuyStatus:Set("Status: Clearing Stock...")
-                    task.wait(0.5) -- Fast check loop
+                    task.wait(5) -- Fast check loop
                 end
                 AutoBuyStatus:Set("Status: Idle")
             end)
