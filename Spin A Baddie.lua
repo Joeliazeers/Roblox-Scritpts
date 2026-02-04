@@ -21,8 +21,8 @@ local Elements = {}
 
 local Window = Rayfield:CreateWindow({
     Name = "Spin a Baddie Script",
-    LoadingTitle = "Archemara Hub",
-    LoadingSubtitle = "Optimized Edition",
+    LoadingTitle = "Spin a Baddie Hub",
+    LoadingSubtitle = "Enjoy Scripting",
     ConfigurationSaving = { Enabled = false },
     Discord = { Enabled = false, Invite = "", RememberJoins = true },
     KeySystem = false
@@ -31,10 +31,10 @@ local Window = Rayfield:CreateWindow({
 -- ==========================================
 --  ORGANIZED TABS (WITH EMOJIS)
 -- ==========================================
-local FarmingTab = Window:CreateTab("💸 Farming", 4483362458)
-local DiceTab    = Window:CreateTab("🎲 Dice Manager", 4483362458)
-local RewardsTab = Window:CreateTab("🎁 Rewards", 4483362458)
-local SettingsTab= Window:CreateTab("⚙️ Settings", 4483362458)
+local FarmingTab = Window:CreateTab("💸 Farming", nil)
+local DiceTab    = Window:CreateTab("🎲 Dice Manager", nil)
+local RewardsTab = Window:CreateTab("🎁 Rewards", nil)
+local SettingsTab= Window:CreateTab("⚙️ Settings", nil)
 
 -- Variables
 local AutoBuyEnabled = false
