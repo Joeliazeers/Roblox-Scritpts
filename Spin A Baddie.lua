@@ -134,6 +134,42 @@ local function getShopStock(diceName)
 end
 
 -- =========================================================================
+--  POTION STOCK READER
+-- =========================================================================
+
+local function getPotionStock(potionName)
+    local pGui = Players.LocalPlayer:FindFirstChild("PlayerGui")
+    if not pGui then return 0 end
+    
+    -- Target: Main.Potions.ScrollingFrame[PotionName].stock
+    if pGui:FindFirstChild("Main") and pGui.Main:FindFirstChild("Potions") then
+        local scroll = pGui.Main.Potions:FindFirstChild("ScrollingFrame")
+        if scroll then
+            local potionFrame = scroll:FindFirstChild(potionName)
+            if potionFrame then
+                -- Check for 'stock' label (Assuming same naming convention as Dice)
+                local stockLabel = potionFrame:FindFirstChild("stock") 
+                if stockLabel and stockLabel:IsA("TextLabel") then
+                    local text = stockLabel.Text
+                    
+                    -- CHECK 1: "NO STOCK"
+                    if text:upper():find("NO STOCK") then
+                        return 0
+                    end
+                    
+                    -- CHECK 2: Extract Number
+                    local num = tonumber(text:match("%d+"))
+                    if num then
+                        return num
+                    end
+                end
+            end
+        end
+    end
+    return 0 
+end
+
+-- =========================================================================
 --  INVENTORY FINDERS
 -- =========================================================================
 
@@ -555,6 +591,63 @@ local AutoBuyElement = DiceTab:CreateToggle({
     end,
 })
 Elements["AutoBuyToggle"] = AutoBuyElement
+
+DiceTab:CreateSection("Potions Manager")
+
+local AutoBuyPotionsEnabled = false
+local PotionStatusLabel = DiceTab:CreateLabel("Status: Idle")
+
+local AutoBuyPotionsElement = DiceTab:CreateToggle({
+    Name = "Auto Clear Potions (Buy All Stock)",
+    CurrentValue = false,
+    Flag = "AutoBuyPotionsToggle",
+    Callback = function(Value)
+        AutoBuyPotionsEnabled = Value
+        if Value then
+            task.spawn(function()
+                while AutoBuyPotionsEnabled do
+                    -- We iterate the GUI Children directly so we don't need a hardcoded list
+                    local pGui = Players.LocalPlayer:FindFirstChild("PlayerGui")
+                    if pGui and pGui:FindFirstChild("Main") and pGui.Main:FindFirstChild("Potions") then
+                        local scroll = pGui.Main.Potions:FindFirstChild("ScrollingFrame")
+                        
+                        if scroll then
+                            PotionStatusLabel:Set("Status: Scanning Shop...")
+                            
+                            for _, child in pairs(scroll:GetChildren()) do
+                                if not AutoBuyPotionsEnabled then break end
+                                
+                                -- Ensure it is a valid Potion Frame
+                                if (child:IsA("Frame") or child:IsA("ImageButton")) and child.Name ~= "UIListLayout" then 
+                                    local stock = getPotionStock(child.Name)
+                                    
+                                    if stock > 0 then
+                                        PotionStatusLabel:Set("Buying: " .. child.Name .. " ("..stock..")")
+                                        pcall(function()
+                                            -- Using the same 'buy' event as Dice. 
+                                            -- If this fails, the game might use 'buyPotion' instead.
+                                            ReplicatedStorage.Events.buy:InvokeServer(child.Name, stock)
+                                        end)
+                                        task.wait(0.2) -- Small delay to prevent throttle
+                                    end
+                                end
+                            end
+                        else
+                            PotionStatusLabel:Set("Status: UI Not Found")
+                        end
+                    end
+                    
+                    if AutoBuyPotionsEnabled then
+                        PotionStatusLabel:Set("Status: Waiting for Restock...")
+                        task.wait(2) -- Cooldown before rescanning
+                    end
+                end
+                PotionStatusLabel:Set("Status: Idle")
+            end)
+        end
+    end,
+})
+Elements["AutoBuyPotionsToggle"] = AutoBuyPotionsElement
 
 DiceTab:CreateSection("Baddies")
 
