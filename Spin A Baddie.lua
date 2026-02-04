@@ -21,15 +21,15 @@ local Elements = {}
 
 local Window = Rayfield:CreateWindow({
     Name = "Spin a Baddie Script",
-    LoadingTitle = "Spin a Baddie Hub",
-    LoadingSubtitle = "Enjoy Scripting",
+    LoadingTitle = "Archemara Hub",
+    LoadingSubtitle = "Exponential Edition",
     ConfigurationSaving = { Enabled = false },
     Discord = { Enabled = false, Invite = "", RememberJoins = true },
     KeySystem = false
 })
 
 -- ==========================================
---  ORGANIZED TABS (WITH EMOJIS)
+--  ORGANIZED TABS (NO ICONS)
 -- ==========================================
 local FarmingTab = Window:CreateTab("💸 Farming", nil)
 local DiceTab    = Window:CreateTab("🎲 Dice Manager", nil)
@@ -416,7 +416,7 @@ DiceTab:CreateSection("Auto-Selector")
 SelectStatusLabel = DiceTab:CreateLabel("Status: Idle")
 
 local AutoSelectElement = DiceTab:CreateToggle({
-    Name = "Auto Select Best Dice",
+    Name = "Auto Select Best Dice (Hybrid Lock)",
     CurrentValue = false,
     Flag = "AutoSelectToggle",
     Callback = function(Value)
@@ -485,7 +485,7 @@ DiceTab:CreateSection("Auto-Buy")
 local AutoBuyStatus = DiceTab:CreateLabel("Status: Idle")
 
 local AutoBuyElement = DiceTab:CreateToggle({
-    Name = "Auto Buy All Dices",
+    Name = "Auto Buy (Exponential Mode)",
     CurrentValue = false,
     Flag = "AutoBuyToggle",
     Callback = function(Value)
@@ -493,15 +493,31 @@ local AutoBuyElement = DiceTab:CreateToggle({
         if Value then
             task.spawn(function()
                 while AutoBuyEnabled do
-                    for k, v in pairs(DiceRankings) do
-                        if not AutoBuyEnabled then break end
-                        pcall(function()
-                            ReplicatedStorage.Events.buy:InvokeServer(k .. " Dice", 1)
-                        end)
-                        task.wait(0.1)
+                    local container = findDiceContainer()
+                    if container then
+                        for _, frame in pairs(container:GetChildren()) do
+                            if not AutoBuyEnabled then break end
+                            if frame:IsA("Frame") or frame:IsA("ImageButton") then
+                                -- Get real-time stock
+                                local stock = getContainerDiceStock(frame)
+                                local name = frame.Name
+                                
+                                -- EXPONENTIAL LOGIC: Buy exactly what you have (Double it)
+                                -- If you have 0, buy 1.
+                                local amountToBuy = stock
+                                if amountToBuy < 1 then amountToBuy = 1 end
+                                
+                                task.spawn(function()
+                                    pcall(function()
+                                        ReplicatedStorage.Events.buy:InvokeServer(name, amountToBuy)
+                                    end)
+                                end)
+                                task.wait(0.02) -- Tiny delay per item
+                            end
+                        end
                     end
-                    AutoBuyStatus:Set("Status: Cycle Complete")
-                    task.wait(1)
+                    AutoBuyStatus:Set("Status: Doubling Stock...")
+                    task.wait(0.5) -- Fast Loop
                 end
                 AutoBuyStatus:Set("Status: Idle")
             end)
@@ -513,7 +529,7 @@ Elements["AutoBuyToggle"] = AutoBuyElement
 DiceTab:CreateSection("Baddies")
 
 local AutoEquipElement = DiceTab:CreateToggle({
-    Name = "Equip Best Baddies",
+    Name = "Equip Best Baddies (Every 1m)",
     CurrentValue = false,
     Flag = "AutoEquipBaddies",
     Callback = function(Value)
